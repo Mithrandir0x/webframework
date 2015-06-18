@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" filepath="$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" />
+      <module fileurl="file://$PROJECT_DIR$/WebFramework/WebFramework.iml" filepath="$PROJECT_DIR$/WebFramework/WebFramework.iml" />
+    </modules>
+  </component>
+</project>
