@@ -1,5 +1,4 @@
 # Web Framework
----------------
 
 This is an implementation of a web framework based on Spring MVC's web annotations
 for educational purposes.

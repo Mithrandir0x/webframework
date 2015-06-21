@@ -29,7 +29,7 @@ public class ServletDispatcher extends HttpServlet {
 
     public enum WebControllerError {
 
-        NotFound(400),
+        NotFound(404),
         InternalServerError(500),
         BadRequest(400);
 
@@ -92,25 +92,17 @@ public class ServletDispatcher extends HttpServlet {
         log("Loaded application controllers");
     }
 
-    @Override
-    public void destroy() {
-        Collection<ServiceController> services = servletServiceProviders.values();
-        for ( ServiceController service : services ) {
-            service.shutdown();
-        }
-    }
-
     private Class[] getControllerClasses(String initParameter) {
         String initParam = getServletContext().getInitParameter(initParameter);
         if ( initParam != null ) {
-            String[] controllerClassNames = initParam.split(",");
+            String[] controllerClassNames = initParam.trim().split(",");
             Class[] controllers = new Class[controllerClassNames.length];
 
-            for (int i = 0; i < controllerClassNames.length; i++) {
+            for ( int i = 0; i < controllerClassNames.length; i++ ) {
                 String className = controllerClassNames[i].trim();
                 try {
                     controllers[i] = Class.forName(className);
-                } catch (Exception ex) {
+                } catch ( Exception ex ) {
                     log(String.format("Could not find class [%s]", className));
                     return new Class[0];
                 }
@@ -123,7 +115,15 @@ public class ServletDispatcher extends HttpServlet {
     }
 
     @Override
-    public void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    public void destroy() {
+        Collection<ServiceController> services = servletServiceProviders.values();
+        for ( ServiceController service : services ) {
+            service.shutdown();
+        }
+    }
+
+    @Override
+    public void doGet(HttpServletRequest request, HttpServletResponse response) {
         try {
             processRequest(HttpMethodType.GET, request, response);
         } catch ( Exception ex ) {
@@ -135,6 +135,33 @@ public class ServletDispatcher extends HttpServlet {
     public void doPost(HttpServletRequest request, HttpServletResponse response) {
         try {
             processRequest(HttpMethodType.POST, request, response);
+        } catch ( Exception ex ) {
+            log("Error while processing POST", ex);
+        }
+    }
+
+    @Override
+    public void doPut(HttpServletRequest request, HttpServletResponse response) {
+        try {
+            processRequest(HttpMethodType.PUT, request, response);
+        } catch ( Exception ex ) {
+            log("Error while processing POST", ex);
+        }
+    }
+
+    @Override
+    public void doDelete(HttpServletRequest request, HttpServletResponse response) {
+        try {
+            processRequest(HttpMethodType.DELETE, request, response);
+        } catch ( Exception ex ) {
+            log("Error while processing POST", ex);
+        }
+    }
+
+    @Override
+    public void doHead(HttpServletRequest request, HttpServletResponse response) {
+        try {
+            processRequest(HttpMethodType.HEAD, request, response);
         } catch ( Exception ex ) {
             log("Error while processing POST", ex);
         }
@@ -175,7 +202,7 @@ public class ServletDispatcher extends HttpServlet {
                     ControllerDescriptor descriptor = servletWebControllerProviders.get(uriRegEx);
                     HttpMethodActionMap actionMap = descriptor.providers.get(method);
                     HttpRequestArgumentMethodDescriptor argumentMethodDescriptor = actionMap.get(action);
-                    if (argumentMethodDescriptor != null) {
+                    if ( argumentMethodDescriptor != null ) {
                         WebController controller = descriptor.instantiateWebController(getServletContext(), request, response);
                         UrlRequestParameterDescriptor urlRequestParameterDescriptor = new UrlRequestParameterDescriptor(m, descriptor.urlRequestParameterIndex);
 
@@ -202,12 +229,12 @@ public class ServletDispatcher extends HttpServlet {
         handleException(request, response, null, WebControllerError.NotFound);
     }
 
-    private void handleException(HttpServletRequest request, HttpServletResponse response, Exception exception, WebControllerError error) throws IOException {
+    private void handleException(HttpServletRequest request, HttpServletResponse response, Exception exception, WebControllerError error) throws IOException, ServletException {
         if ( !response.isCommitted() ) {
             request.getSession().setAttribute(WebControllerErrorTypeAttr, error);
             request.getSession().setAttribute(WebControllerExceptionAttr, exception);
 
-            if (errorHandlerProvider != null && errorHandlerProvider.providers.containsKey(HttpMethodType.GET)) {
+            if ( errorHandlerProvider != null && errorHandlerProvider.providers.containsKey(HttpMethodType.GET) ) {
                 UrlPathController pathController = (UrlPathController) errorHandlerProvider.classController.getAnnotation(UrlPathController.class);
                 String path = String.format("%s%s", request.getContextPath(), pathController.path());
                 response.sendRedirect(path);
@@ -248,7 +275,7 @@ public class ServletDispatcher extends HttpServlet {
         String errorHandlerControllerClassName = getServletContext().getInitParameter("errorhandler");
 
         try {
-            if (errorHandlerControllerClassName != null) {
+            if ( errorHandlerControllerClassName != null ) {
                 Class clazz = Class.forName(errorHandlerControllerClassName);
 
                 log(String.format("Registering error handling controller [%s]", clazz.getCanonicalName()));
@@ -266,15 +293,21 @@ public class ServletDispatcher extends HttpServlet {
     private ControllerDescriptor registerClassWebController(Class clazz) throws Exception {
         log(String.format("Loading controller [%s]...", clazz.getCanonicalName()));
         ControllerDescriptor descriptor = null;
-        if ( clazz.isAnnotationPresent(UrlPathController.class) ) {
+        if ( isClassWebController(clazz) ) {
             descriptor = generateDescriptor(clazz);
             UrlPathController pathController = (UrlPathController) clazz.getAnnotation(UrlPathController.class);
             Pattern pattern = getUriPattern(pathController, descriptor);
             servletWebControllerProviders.put(pattern, descriptor);
         } else {
-            log(String.format("   Class [%s] does not have UrlPathController annotation", clazz.getCanonicalName()));
+            log(String.format("   Class [%s] does not have UrlPathController annotation or does not extend from WebController", clazz.getCanonicalName()));
         }
         return descriptor;
+    }
+
+    private boolean isClassWebController(Class clazz) {
+        return clazz != null
+                && clazz.isAnnotationPresent(UrlPathController.class)
+                && WebController.class.isAssignableFrom(clazz);
     }
 
     private ControllerDescriptor generateDescriptor(Class clazz) throws Exception {
@@ -317,7 +350,7 @@ public class ServletDispatcher extends HttpServlet {
 
     private void registerClassService(Class clazz) throws Exception {
         log(String.format("Loading service [%s]...", clazz.getCanonicalName()));
-        if ( clazz.isAnnotationPresent(Service.class) ) {
+        if ( isClassServiceController(clazz) ) {
             ServiceController serviceController = (ServiceController) clazz.newInstance();
             serviceController.servletContext = getServletContext();
             servletServiceProviders.put(clazz, serviceController);
@@ -328,7 +361,7 @@ public class ServletDispatcher extends HttpServlet {
 
     private void connectServiceDependencies(Class clazz) throws Exception {
         log(String.format("Loading service dependencies [%s]...", clazz.getCanonicalName()));
-        if ( clazz.isAnnotationPresent(Service.class) ) {
+        if ( isClassServiceController(clazz) ) {
             Field[] classFields = clazz.getDeclaredFields();
             ServiceController controller = servletServiceProviders.get(clazz);
 
@@ -351,6 +384,12 @@ public class ServletDispatcher extends HttpServlet {
         } else {
             log(String.format("   Class [%s] does not have Service annotation", clazz.getCanonicalName()));
         }
+    }
+
+    private boolean isClassServiceController(Class clazz) {
+        return clazz != null
+                && clazz.isAnnotationPresent(Service.class)
+                && ServiceController.class.isAssignableFrom(clazz);
     }
 
     private void initializeService(Class clazz) {
@@ -388,7 +427,7 @@ public class ServletDispatcher extends HttpServlet {
 
         Class classController;
         Map<String, HttpMethodActionMap> providers = new ConcurrentHashMap<>();
-        Map<String, Integer> urlRequestParameterIndex = new HashMap<>();
+        Map<String, Integer> urlRequestParameterIndex = new ConcurrentHashMap<>();
 
         public WebController instantiateWebController(ServletContext servletContext, HttpServletRequest request, HttpServletResponse response) throws Exception {
             Object o = classController.newInstance();

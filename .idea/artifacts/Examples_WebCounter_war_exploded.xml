@@ -1,0 +1,14 @@
+<component name="ArtifactManager">
+  <artifact type="exploded-war" name="Examples.WebCounter:war exploded">
+    <output-path>$PROJECT_DIR$/out/artifacts/Examples_WebCounter_war_exploded</output-path>
+    <root id="root">
+      <element id="javaee-facet-resources" facet="Examples.WebCounter/web/Web" />
+      <element id="directory" name="WEB-INF">
+        <element id="directory" name="classes">
+          <element id="module-output" name="Examples.WebCounter" />
+          <element id="module-output" name="WebFramework" />
+        </element>
+      </element>
+    </root>
+  </artifact>
+</component>

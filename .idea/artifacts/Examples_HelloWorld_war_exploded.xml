@@ -1,6 +1,6 @@
 <component name="ArtifactManager">
-  <artifact type="exploded-war" name="HelloWorld:war exploded">
-    <output-path>$PROJECT_DIR$/out/artifacts/HelloWorld_war_exploded</output-path>
+  <artifact type="exploded-war" name="Examples.HelloWorld:war exploded">
+    <output-path>$PROJECT_DIR$/out/artifacts/Examples_HelloWorld_war_exploded</output-path>
     <root id="root">
       <element id="javaee-facet-resources" facet="Examples.HelloWorld/web/Web" />
       <element id="directory" name="WEB-INF">

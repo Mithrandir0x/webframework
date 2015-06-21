@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/Examples/ErrorHandling/Examples.ErrorHandling.iml" filepath="$PROJECT_DIR$/Examples/ErrorHandling/Examples.ErrorHandling.iml" />
       <module fileurl="file://$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" filepath="$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Examples/WebCounter/Examples.WebCounter.iml" filepath="$PROJECT_DIR$/Examples/WebCounter/Examples.WebCounter.iml" />
       <module fileurl="file://$PROJECT_DIR$/WebFramework/WebFramework.iml" filepath="$PROJECT_DIR$/WebFramework/WebFramework.iml" />
     </modules>
   </component>
