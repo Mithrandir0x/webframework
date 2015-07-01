@@ -2,10 +2,12 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/Examples/ErrorHandling/Examples.ErrorHandling.iml" filepath="$PROJECT_DIR$/Examples/ErrorHandling/Examples.ErrorHandling.iml" />
-      <module fileurl="file://$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" filepath="$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" />
-      <module fileurl="file://$PROJECT_DIR$/Examples/WebCounter/Examples.WebCounter.iml" filepath="$PROJECT_DIR$/Examples/WebCounter/Examples.WebCounter.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Examples/ErrorHandling/Examples.ErrorHandling.iml" filepath="$PROJECT_DIR$/Examples/ErrorHandling/Examples.ErrorHandling.iml" group="Examples" />
+      <module fileurl="file://$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" filepath="$PROJECT_DIR$/Examples/HelloWorld/Examples.HelloWorld.iml" group="Examples" />
+      <module fileurl="file://$PROJECT_DIR$/Examples/TodoMVC/Examples.TodoMVC.iml" filepath="$PROJECT_DIR$/Examples/TodoMVC/Examples.TodoMVC.iml" group="Examples" />
+      <module fileurl="file://$PROJECT_DIR$/Examples/WebCounter/Examples.WebCounter.iml" filepath="$PROJECT_DIR$/Examples/WebCounter/Examples.WebCounter.iml" group="Examples" />
       <module fileurl="file://$PROJECT_DIR$/WebFramework/WebFramework.iml" filepath="$PROJECT_DIR$/WebFramework/WebFramework.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Tests/WebFrameworkTests.iml" filepath="$PROJECT_DIR$/Tests/WebFrameworkTests.iml" />
     </modules>
   </component>
 </project>

@@ -1,18 +1,17 @@
 package edu.webframework;
 
 import edu.webframework.annotations.*;
-import edu.webframework.exceptions.RequiredHttpRequestParameter;
+import edu.webframework.exceptions.RequiredHttpRequestParameterException;
+import edu.webframework.exceptions.WebControllerDefinitionException;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.net.URLDecoder;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,7 +52,14 @@ public class ServletDispatcher extends HttpServlet {
     public void init() {
         Class[] controllerClasses = getControllerClasses("webcontrollers");
         Class[] serviceClasses = getControllerClasses("services");
+        Class[] exceptionHandlerClass = getControllerClasses("errorhandler");
 
+        initializeServices(serviceClasses);
+        initializeWebControllers(controllerClasses);
+        initializeErrorHandler(exceptionHandlerClass);
+    }
+
+    protected void initializeServices(Class[] serviceClasses) {
         for ( Class serviceClass : serviceClasses ) {
             try {
                 registerClassService(serviceClass);
@@ -77,7 +83,9 @@ public class ServletDispatcher extends HttpServlet {
                 log(ex.getMessage(), ex);
             }
         }
+    }
 
+    protected void initializeWebControllers(Class[] controllerClasses) {
         // @TODO Handle controller register exceptions in a nicer way...
         for ( Class controllerClass : controllerClasses ) {
             try {
@@ -86,13 +94,17 @@ public class ServletDispatcher extends HttpServlet {
                 log(ex.getMessage(), ex);
             }
         }
-
-        registerErrorHandlerController();
-
-        log("Loaded application controllers");
     }
 
-    private Class[] getControllerClasses(String initParameter) {
+    protected void initializeErrorHandler(Class[] exceptionHandlerClass) {
+        if ( exceptionHandlerClass.length >= 1 ) {
+            registerErrorHandlerController(exceptionHandlerClass[0]);
+        } else {
+            log("No controller available for error handling");
+        }
+    }
+
+    protected Class[] getControllerClasses(String initParameter) {
         String initParam = getServletContext().getInitParameter(initParameter);
         if ( initParam != null ) {
             String[] controllerClassNames = initParam.trim().split(",");
@@ -123,48 +135,28 @@ public class ServletDispatcher extends HttpServlet {
     }
 
     @Override
-    public void doGet(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            processRequest(HttpMethodType.GET, request, response);
-        } catch ( Exception ex ) {
-            log("Error while processing GET", ex);
-        }
+    public void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException {
+        processRequest(HttpMethodType.GET, request, response);
     }
 
     @Override
-    public void doPost(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            processRequest(HttpMethodType.POST, request, response);
-        } catch ( Exception ex ) {
-            log("Error while processing POST", ex);
-        }
+    public void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException {
+        processRequest(HttpMethodType.POST, request, response);
     }
 
     @Override
-    public void doPut(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            processRequest(HttpMethodType.PUT, request, response);
-        } catch ( Exception ex ) {
-            log("Error while processing POST", ex);
-        }
+    public void doPut(HttpServletRequest request, HttpServletResponse response) throws ServletException {
+        processRequest(HttpMethodType.PUT, request, response);
     }
 
     @Override
-    public void doDelete(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            processRequest(HttpMethodType.DELETE, request, response);
-        } catch ( Exception ex ) {
-            log("Error while processing POST", ex);
-        }
+    public void doDelete(HttpServletRequest request, HttpServletResponse response) throws ServletException {
+        processRequest(HttpMethodType.DELETE, request, response);
     }
 
     @Override
-    public void doHead(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            processRequest(HttpMethodType.HEAD, request, response);
-        } catch ( Exception ex ) {
-            log("Error while processing POST", ex);
-        }
+    public void doHead(HttpServletRequest request, HttpServletResponse response) throws ServletException {
+        processRequest(HttpMethodType.HEAD, request, response);
     }
 
     public static String getContextBaseUrl(HttpServletRequest request) {
@@ -174,67 +166,67 @@ public class ServletDispatcher extends HttpServlet {
         return String.format("//%s:%s%s/", serverName, port, contextPath);
     }
 
-    public static void setContextUrl(HttpServletRequest request) {
-        String contextBaseUrl = getContextBaseUrl(request);
-        request.setAttribute("contextBaseUrl", contextBaseUrl);
-    }
+    // @TODO Find better exception handling
+    protected void processRequest(String method, HttpServletRequest request, HttpServletResponse response) throws ServletException {
+        try {
+            String contextPath = request.getContextPath();
+            String requestUri = request.getRequestURI();
+            String processedUri = requestUri.replace(contextPath, "");
+            String requestUrl = request.getRequestURL().toString();
+            String servletPath = request.getServletPath();
 
-    private void processRequest(String method, HttpServletRequest request, HttpServletResponse response) throws Exception {
-        String contextPath = request.getContextPath();
-        String requestUri = request.getRequestURI();
-        String processedUri = requestUri.replace(contextPath, "");
-        String requestUrl = request.getRequestURL().toString();
-        String servletPath = request.getServletPath();
+            String action = request.getParameter(ACTION);
+            action = action == null ? DEFAULT : action;
 
-        String action = request.getParameter(ACTION);
-        action = action == null ? DEFAULT : action;
+            log(String.format("method [%s] action [%s] contextPath [%s] requestUri [%s] processedUri [%s] requestUrl [%s] servletPath [%s]",
+                    method, action, contextPath, requestUri, processedUri, requestUrl, servletPath));
 
-        log(String.format("method [%s] action [%s] contextPath [%s] requestUri [%s] processedUri [%s] requestUrl [%s] servletPath [%s]",
-                method, action, contextPath, requestUri, processedUri, requestUrl, servletPath));
+            setContextBaseUrl(request);
 
-        setContextUrl(request);
+            // @TODO Find a better way to group regular expressions, without having to iterate through multiple patterns
+            for (Pattern uriRegEx : servletWebControllerProviders.keySet()) {
+                Matcher m = uriRegEx.matcher(processedUri);
+                if (m.matches()) {
+                    try {
+                        ControllerDescriptor descriptor = servletWebControllerProviders.get(uriRegEx);
+                        HttpMethodActionMap actionMap = descriptor.providers.get(method);
+                        HttpRequestArgumentMethodDescriptor argumentMethodDescriptor = actionMap.get(action);
+                        if (argumentMethodDescriptor != null) {
+                            WebController controller = descriptor.instantiateWebController(getServletContext(), request, response);
+                            UrlRequestParameterDescriptor urlRequestParameterDescriptor = new UrlRequestParameterDescriptor(m, descriptor.urlRequestParameterIndex);
 
-        // @TODO Find a better way to group regular expressions, without having to iterate through multiple patterns
-        for ( Pattern uriRegEx : servletWebControllerProviders.keySet() ) {
-            Matcher m = uriRegEx.matcher(processedUri);
-            if ( m.matches() ) {
-                try {
-                    ControllerDescriptor descriptor = servletWebControllerProviders.get(uriRegEx);
-                    HttpMethodActionMap actionMap = descriptor.providers.get(method);
-                    HttpRequestArgumentMethodDescriptor argumentMethodDescriptor = actionMap.get(action);
-                    if ( argumentMethodDescriptor != null ) {
-                        WebController controller = descriptor.instantiateWebController(getServletContext(), request, response);
-                        UrlRequestParameterDescriptor urlRequestParameterDescriptor = new UrlRequestParameterDescriptor(m, descriptor.urlRequestParameterIndex);
-
-                        try {
                             argumentMethodDescriptor.method.invoke(controller, getMethodArgumentsArray(request, argumentMethodDescriptor, urlRequestParameterDescriptor));
                             return;
-                        } catch ( RequiredHttpRequestParameter ex ) {
-                            log(ex.getMessage(), ex);
-                            handleException(request, response, ex, WebControllerError.BadRequest);
-                            return;
                         }
+                    } catch ( RequiredHttpRequestParameterException ex ) {
+                        handleException(request, response, ex, WebControllerError.BadRequest);
+                        return;
+                    } catch ( InvocationTargetException ex ) {
+                        handleException(request, response, ex.getCause(), WebControllerError.InternalServerError);
+                        return;
                     }
-                } catch ( Exception ex ) {
-                    log(ex.getMessage(), ex);
-                    handleException(request, response, ex, WebControllerError.InternalServerError);
-                    return;
+
+                    break;
                 }
-
-                break;
             }
-        }
 
-        log(String.format("Unknown url [%s]", requestUrl));
-        handleException(request, response, null, WebControllerError.NotFound);
+            log(String.format("Unknown url [%s]", requestUrl));
+            handleException(request, response, null, WebControllerError.NotFound);
+        } catch ( Throwable ex ) {
+            throw new ServletException(ex);
+        }
     }
 
-    private void handleException(HttpServletRequest request, HttpServletResponse response, Exception exception, WebControllerError error) throws IOException, ServletException {
-        if ( !response.isCommitted() ) {
+    protected void handleException(HttpServletRequest request, HttpServletResponse response, Throwable exception, WebControllerError error) throws Throwable {
+        if ( errorHandlerProvider == null && exception != null ) {
+            throw exception;
+        }
+
+        if ( errorHandlerProvider != null && !response.isCommitted() ) {
             request.getSession().setAttribute(WebControllerErrorTypeAttr, error);
             request.getSession().setAttribute(WebControllerExceptionAttr, exception);
 
-            if ( errorHandlerProvider != null && errorHandlerProvider.providers.containsKey(HttpMethodType.GET) ) {
+            if ( errorHandlerProvider.providers.containsKey(HttpMethodType.GET) ) {
                 UrlPathController pathController = (UrlPathController) errorHandlerProvider.classController.getAnnotation(UrlPathController.class);
                 String path = String.format("%s%s", request.getContextPath(), pathController.path());
                 response.sendRedirect(path);
@@ -242,26 +234,26 @@ public class ServletDispatcher extends HttpServlet {
         }
     }
 
-    private Object[] getMethodArgumentsArray(HttpServletRequest request,
+    protected Object[] getMethodArgumentsArray(HttpServletRequest request,
                                              HttpRequestArgumentMethodDescriptor argumentMethodDescriptor,
                                              UrlRequestParameterDescriptor urlRequestParameterDescriptor)
-            throws RequiredHttpRequestParameter, UnsupportedEncodingException {
+            throws RequiredHttpRequestParameterException, UnsupportedEncodingException {
         Object[] arguments = new Object[argumentMethodDescriptor.requestArguments.size()];
         int i = 0;
         for ( RequestArgument requestArgument : argumentMethodDescriptor.requestArguments ) {
             String argumentName = requestArgument.name;
             if ( requestArgument.fromUrl ) {
                 if ( urlRequestParameterDescriptor != null ) {
-                    arguments[i] = URLDecoder.decode(urlRequestParameterDescriptor.getValue(argumentName), "UTF-8");
+                    arguments[i] = castPrimitive(requestArgument.type, URLDecoder.decode(urlRequestParameterDescriptor.getValue(argumentName), "UTF-8"));
                 } else {
                     arguments[i] = null;
                 }
             } else {
-                arguments[i] = request.getParameter(argumentName);
+                arguments[i] = cast(request, requestArgument.type, requestArgument.genericTypes, argumentName);
             }
 
             if ( arguments[i] == null && requestArgument.required ) {
-                throw new RequiredHttpRequestParameter(argumentName);
+                throw new RequiredHttpRequestParameterException(argumentName);
             }
 
             // log(String.format("Attribute name [%s] value [%s]", requestArgument.name, arguments[i]));
@@ -271,26 +263,115 @@ public class ServletDispatcher extends HttpServlet {
         return arguments;
     }
 
-    private void registerErrorHandlerController() {
-        String errorHandlerControllerClassName = getServletContext().getInitParameter("errorhandler");
+    private void setContextBaseUrl(HttpServletRequest request) {
+        String contextBaseUrl = getContextBaseUrl(request);
+        request.setAttribute("contextBaseUrl", contextBaseUrl);
+    }
 
-        try {
-            if ( errorHandlerControllerClassName != null ) {
-                Class clazz = Class.forName(errorHandlerControllerClassName);
-
-                log(String.format("Registering error handling controller [%s]", clazz.getCanonicalName()));
-                errorHandlerProvider = registerClassWebController(clazz);
-            }
-        } catch ( Exception ex ) {
-            log(ex.getMessage(), ex);
-        } finally {
-            if ( errorHandlerProvider == null ) {
-                log("No controller available for error handling");
-            }
+    protected <T> T cast(HttpServletRequest request, Class<T> clazz, Class[] genericTypes, String argumentName) {
+        if ( List.class.equals(clazz) ) {
+            return castList(request.getParameterValues(argumentName), genericTypes[0]);
+        } else if ( isClassPrimitive(clazz) ) {
+            return castPrimitive(clazz, request.getParameter(argumentName));
+        } else {
+            return castObject(request, clazz, argumentName);
         }
     }
 
-    private ControllerDescriptor registerClassWebController(Class clazz) throws Exception {
+    protected <T> T castPrimitive(Class<T> clazz, String value) {
+        if ( String.class.equals(clazz) ) {
+            return (T) value;
+        } else if ( Integer.class.equals(clazz) ) {
+            return (T) Integer.valueOf(value);
+        } else if ( Long.class.equals(clazz) ) {
+            return (T) Long.valueOf(value);
+        } else if ( Float.class.equals(clazz) ) {
+            return (T) Float.valueOf(value);
+        } else if ( Double.class.equals(clazz) ) {
+            return (T) Double.valueOf(value);
+        }
+
+        // @TODO Maybe, it should throw exception here...
+        return null;
+    }
+
+    private <T> T castList(String[] parameterValues, Class genericType) {
+        List list = new ArrayList<>();
+
+        if ( parameterValues != null ) {
+            for ( String value : parameterValues ) {
+                list.add(castPrimitive(genericType, value));
+            }
+        }
+
+        return (T) list;
+    }
+
+    protected <T> T castObject(HttpServletRequest request, Class<T> clazz, String argumentName) {
+        try {
+            T instance = clazz.newInstance();
+            Field[] fields = clazz.getDeclaredFields();
+
+            for ( Field field : fields ) {
+                String fieldName = field.getName();
+
+                String requestFieldName = argumentName + "." + fieldName;
+
+                Class<?> fieldClass = field.getType();
+                Method method = clazz.getMethod(getSetterMethodName(fieldName), new Class[]{fieldClass});
+
+                if ( List.class.equals(fieldClass) ) {
+                    String[] values = request.getParameterValues(requestFieldName);
+                    if ( values != null && values.length > 0 ) {
+                        ParameterizedType paramType = (ParameterizedType) field.getGenericType();
+                        method.invoke(instance, castList(request.getParameterValues(requestFieldName), (Class) paramType.getActualTypeArguments()[0]));
+                    } else {
+                        method.invoke(instance, new ArrayList<>());
+                    }
+                } else if ( isClassPrimitive(fieldClass) ) {
+                    String value = request.getParameter(requestFieldName);
+                    if ( value != null ) {
+                        method.invoke(instance, castPrimitive(fieldClass, value));
+                    }
+                }
+                // @TODO Look for a possible solution for circular class dependencies when looking up the fields.
+                /* else {
+                    method.invoke(instance, castObject(request, fieldClass, requestFieldName));
+                } */
+            }
+
+            return instance;
+
+        } catch ( Exception ex ) {
+            // @TODO Maybe, it should throw exception here...
+            log(ex.getMessage(), ex);
+            return null;
+        }
+    }
+
+    protected String getSetterMethodName(String fieldName) {
+        return String.format("set%s%s",
+                fieldName.substring(0, 1).toUpperCase(),
+                fieldName.substring(1));
+    }
+
+    protected boolean isClassPrimitive(Class clazz) {
+        return String.class.equals(clazz)
+                || Integer.class.equals(clazz)
+                || Float.class.equals(clazz)
+                || Double.class.equals(clazz);
+    }
+
+    protected void registerErrorHandlerController(Class clazz) {
+        try {
+            log(String.format("Registering error handling controller [%s]", clazz.getCanonicalName()));
+            errorHandlerProvider = registerClassWebController(clazz);
+        } catch ( Exception ex ) {
+            log(ex.getMessage(), ex);
+        }
+    }
+
+    protected ControllerDescriptor registerClassWebController(Class clazz) throws Exception {
         log(String.format("Loading controller [%s]...", clazz.getCanonicalName()));
         ControllerDescriptor descriptor = null;
         if ( isClassWebController(clazz) ) {
@@ -304,13 +385,13 @@ public class ServletDispatcher extends HttpServlet {
         return descriptor;
     }
 
-    private boolean isClassWebController(Class clazz) {
+    protected boolean isClassWebController(Class clazz) {
         return clazz != null
                 && clazz.isAnnotationPresent(UrlPathController.class)
                 && WebController.class.isAssignableFrom(clazz);
     }
 
-    private ControllerDescriptor generateDescriptor(Class clazz) throws Exception {
+    protected ControllerDescriptor generateDescriptor(Class clazz) throws Exception {
         ControllerDescriptor descriptor = new ControllerDescriptor();
         descriptor.classController = clazz;
 
@@ -327,14 +408,34 @@ public class ServletDispatcher extends HttpServlet {
                 argumentDescriptor.httpMethod = httpMethod.type();
                 argumentDescriptor.method = classMethod;
 
+                Class[] paramClasses = classMethod.getParameterTypes();
+                Type[] genTypes = classMethod.getGenericParameterTypes();
+                ParameterizedType[] genericTypes;
+
+                boolean doesMethodArgumentContainGenerics = genTypes != null && genTypes.length > 0
+                        && genTypes[0] instanceof ParameterizedType;
+
+                if ( doesMethodArgumentContainGenerics ) {
+                    genericTypes = Arrays.copyOf(genTypes, genTypes.length, ParameterizedType[].class);
+                } else {
+                    genericTypes = new ParameterizedType[0];
+                }
+
                 Annotation[][] parameterAnnotationsArray = classMethod.getParameterAnnotations();
-                for (Annotation[] parameterAnnotations : parameterAnnotationsArray) {
-                    for (Annotation parameterAnnotation : parameterAnnotations) {
-                        if ( parameterAnnotation != null ) {
-                            if ( parameterAnnotation instanceof HttpRequestParameter ) {
-                                HttpRequestParameter httpRequestParameter = (HttpRequestParameter) parameterAnnotation;
-                                argumentDescriptor.requestArguments.add(new RequestArgument(httpRequestParameter));
-                            }
+
+                for ( int i = 0 ; i < parameterAnnotationsArray.length ; i++ ) {
+                    Annotation[] parameterAnnotations = parameterAnnotationsArray[i];
+                    Class<?> paramClass = paramClasses[i];
+
+                    if ( paramClass.isPrimitive() ) {
+                        throw new WebControllerDefinitionException(String.format("Method [%s] argument [%s] cannot be primitive", classMethod.getName(), i));
+                    }
+
+                    for ( Annotation parameterAnnotation : parameterAnnotations ) {
+                        if ( parameterAnnotation != null && parameterAnnotation instanceof HttpRequestParameter ) {
+                            HttpRequestParameter httpRequestParameter = (HttpRequestParameter) parameterAnnotation;
+                            Class[] genericClasses = genericTypes.length > 0 ? castTypeArray(genericTypes[i].getActualTypeArguments()) : new Class[0];
+                            argumentDescriptor.requestArguments.add(new RequestArgument(httpRequestParameter, paramClass, genericClasses));
                         }
                     }
                 }
@@ -348,7 +449,19 @@ public class ServletDispatcher extends HttpServlet {
         return descriptor;
     }
 
-    private void registerClassService(Class clazz) throws Exception {
+    protected Class[] castTypeArray(Type[] types) {
+        Class[] classes = new Class[types.length];
+
+        if ( types.length > 0 ) {
+            for ( int i = 0; i < types.length; i++ ) {
+                classes[i] = (Class) types[i];
+            }
+        }
+
+        return classes;
+    }
+
+    protected void registerClassService(Class clazz) throws Exception {
         log(String.format("Loading service [%s]...", clazz.getCanonicalName()));
         if ( isClassServiceController(clazz) ) {
             ServiceController serviceController = (ServiceController) clazz.newInstance();
@@ -359,7 +472,7 @@ public class ServletDispatcher extends HttpServlet {
         }
     }
 
-    private void connectServiceDependencies(Class clazz) throws Exception {
+    protected void connectServiceDependencies(Class clazz) throws Exception {
         log(String.format("Loading service dependencies [%s]...", clazz.getCanonicalName()));
         if ( isClassServiceController(clazz) ) {
             Field[] classFields = clazz.getDeclaredFields();
@@ -386,18 +499,22 @@ public class ServletDispatcher extends HttpServlet {
         }
     }
 
-    private boolean isClassServiceController(Class clazz) {
+    protected boolean isClassServiceController(Class clazz) {
         return clazz != null
                 && clazz.isAnnotationPresent(Service.class)
                 && ServiceController.class.isAssignableFrom(clazz);
     }
 
-    private void initializeService(Class clazz) {
+    protected void initializeService(Class clazz) {
         ServiceController controller = servletServiceProviders.get(clazz);
-        controller.initialize();
+        if ( controller != null ) {
+            controller.initialize();
+        } else {
+            log(String.format("Service [%s] is not available", clazz.getCanonicalName()));
+        }
     }
 
-    private Pattern getUriPattern(UrlPathController pathController, ControllerDescriptor descriptor) {
+    protected Pattern getUriPattern(UrlPathController pathController, ControllerDescriptor descriptor) {
         String path = pathController.path();
 
         Pattern p = Pattern.compile("\\{[a-zA-Z0-9]*\\}");
@@ -423,7 +540,7 @@ public class ServletDispatcher extends HttpServlet {
         return Pattern.compile(path);
     }
 
-    private class ControllerDescriptor {
+    class ControllerDescriptor {
 
         Class classController;
         Map<String, HttpMethodActionMap> providers = new ConcurrentHashMap<>();
@@ -456,9 +573,9 @@ public class ServletDispatcher extends HttpServlet {
 
     }
 
-    private class HttpMethodActionMap extends ConcurrentHashMap<String, HttpRequestArgumentMethodDescriptor> {}
+    class HttpMethodActionMap extends ConcurrentHashMap<String, HttpRequestArgumentMethodDescriptor> {}
 
-    private class HttpRequestArgumentMethodDescriptor {
+    class HttpRequestArgumentMethodDescriptor {
 
         Method method;
         String httpMethod;
@@ -471,16 +588,20 @@ public class ServletDispatcher extends HttpServlet {
 
     }
 
-    private class RequestArgument {
+    class RequestArgument {
 
         String name;
         boolean required;
         boolean fromUrl;
+        Class<?> type;
+        Class<?>[] genericTypes;
 
-        public RequestArgument(HttpRequestParameter httpRequestParameter) {
+        public RequestArgument(HttpRequestParameter httpRequestParameter, Class clazz, Class[] genericClasses) {
             name = httpRequestParameter.name();
             required = httpRequestParameter.required();
             fromUrl = httpRequestParameter.fromUrl();
+            type = clazz;
+            genericTypes = genericClasses;
         }
 
     }

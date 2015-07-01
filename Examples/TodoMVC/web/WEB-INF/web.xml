@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd"
+         version="3.1">
+
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>/static/*</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>ServletDispatcher</servlet-name>
+        <url-pattern>/</url-pattern>
+    </servlet-mapping>
+    <servlet>
+        <servlet-name>ServletDispatcher</servlet-name>
+        <servlet-class>edu.webframework.ServletDispatcher</servlet-class>
+        <load-on-startup>1</load-on-startup>
+    </servlet>
+
+    <context-param>
+        <param-name>webcontrollers</param-name>
+        <param-value>
+            com.todomvc.TodoController
+        </param-value>
+    </context-param>
+
+    <context-param>
+        <param-name>services</param-name>
+        <param-value>
+            com.todomvc.TodoListService
+        </param-value>
+    </context-param>
+
+</web-app>
